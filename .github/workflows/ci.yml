@@ -5,6 +5,12 @@ on:
     branches:
       - main
 
+env:
+  AWS_REGION: eu-north-1
+  ECR_REGISTRY: 730649731642.dkr.ecr.eu-north-1.amazonaws.com
+  ECR_REPOSITORY: devops-task4-app
+  IMAGE_TAG: latest
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -18,22 +24,24 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker Image
         run: |
-          docker build -t devops-task4-app .
+          docker build -t devops-task4-app:${{ env.IMAGE_TAG }} .
 
       - name: Tag Docker Image
         run: |
-          docker tag devops-task4-app:latest 730649731642.dkr.ecr.eu-north-1.amazonaws.com/devops-task4-app:latest
+          docker tag devops-task4-app:${{ env.IMAGE_TAG }} \
+          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
       - name: Push Docker Image
         run: |
-          docker push 730649731642.dkr.ecr.eu-north-1.amazonaws.com/devops-task4-app:latest
+          docker push \
+          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
   deploy:
     needs: build-and-push
@@ -47,16 +55,30 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
+
+            echo "Moving to project directory..."
             cd ~/devops-task4-cicd
 
+            echo "Pulling latest GitHub code..."
             git pull origin main
 
-            aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 730649731642.dkr.ecr.eu-north-1.amazonaws.com
+            echo "Logging into Amazon ECR..."
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
 
+            echo "Stopping existing containers..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+
+            echo "Removing old containers if they exist..."
+            docker rm -f flask-app nginx || true
+
+            echo "Pulling latest Docker image..."
             docker compose -f docker-compose.prod.yml pull
 
-            docker compose -f docker-compose.prod.yml down
-
+            echo "Starting application..."
             docker compose -f docker-compose.prod.yml up -d
 
+            echo "Cleaning unused Docker images..."
             docker image prune -f
+
+            echo "Deployment completed successfully!"
