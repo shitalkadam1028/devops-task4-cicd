@@ -1,4 +1,4 @@
-name: build and Push Docker Image to ECR
+name: Build, Push and Deploy
 
 on:
   push:
@@ -21,7 +21,6 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker Image
@@ -35,3 +34,29 @@ jobs:
       - name: Push Docker Image
         run: |
           docker push 730649731642.dkr.ecr.eu-north-1.amazonaws.com/devops-task4-app:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/devops-task4-cicd
+
+            git pull origin main
+
+            aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 730649731642.dkr.ecr.eu-north-1.amazonaws.com
+
+            docker compose -f docker-compose.prod.yml pull
+
+            docker compose -f docker-compose.prod.yml down
+
+            docker compose -f docker-compose.prod.yml up -d
+
+            docker image prune -f

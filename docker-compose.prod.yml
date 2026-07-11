@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  flask-app:
+    image: 730649731642.dkr.ecr.eu-north-1.amazonaws.com/devops-task4-app:latest
+    container_name: flask-app
+    restart: always
+    expose:
+      - "5000"
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - flask-app
