@@ -1,0 +1,79 @@
+name: CD - Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows:
+      - "CI - Build and Push Docker Image"
+    types:
+      - completed
+
+env:
+  AWS_REGION: eu-north-1
+  ECR_REGISTRY: 730649731642.dkr.ecr.eu-north-1.amazonaws.com
+
+jobs:
+  deploy:
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+
+          script: |
+
+            set -e
+
+            echo "=============================="
+            echo "Updating Project"
+            echo "=============================="
+
+            cd ~/devops-task4-cicd
+
+            git pull origin main
+
+            echo "=============================="
+            echo "Logging into Amazon ECR"
+            echo "=============================="
+
+            aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 730649731642.dkr.ecr.eu-north-1.amazonaws.com
+
+            echo "=============================="
+            echo "Applying Kubernetes Manifests"
+            echo "=============================="
+
+            kubectl apply -f kubernetes/
+
+            echo "=============================="
+            echo "Restarting Deployment"
+            echo "=============================="
+
+            kubectl rollout restart deployment flask-deployment
+
+            echo "=============================="
+            echo "Waiting for Rollout"
+            echo "=============================="
+
+            kubectl rollout status deployment/flask-deployment
+
+            echo "=============================="
+            echo "Deployment Status"
+            echo "=============================="
+
+            kubectl get deployments
+
+            kubectl get pods
+
+            kubectl get svc
+
+            echo "=============================="
+            echo "Deployment Successful"
+            echo "=============================="
