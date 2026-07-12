@@ -6,4 +6,4 @@ metadata:
   name: flask-config
 
 data:
-  APP_MESSAGE: "Hello from Kubernetes ConfigMap 🚀"
+  APP_MESSAGE: "Hello from Kubernetes ConfigMap: shital 🚀"
